@@ -8,189 +8,178 @@
 #include<map>
 #include<algorithm>
 using namespace std;
-int N;
-int D;
-int S;
-const unsigned long long maxIterLimit = 100000000;
-vector<vector<vector<bool>>>request{};//第i天,j个阿姨,第k天的请求
-vector<vector<vector<uint8_t>>>job_aunt{};//第i天,j班,阿姨的一个列表
-vector<vector<uint8_t>>table{};//排班表
-
-/*
-    用于记录第i天j班的分配,如果这一次分配符合约束,则进入栈中,
-*/
-struct step{
-    int _day; //第day天
-    int _schedule;//第schedule班
-    vector<vector<uint8_t>>_table;//当前已经分配好的班次
-    vector<uint8_t>_chooseRecord{};//记录本次操作已经尝试选择过的阿姨
-    bool checkSameWork() const;//检查该操作是否满足不重复工作
-    // bool checkEveryoneHasJob();//检查每一个人是否都有工作
-    bool checkMinWorkCount() const;//检查是否还能满足每一个阿姨的最少工作数
-    step(int day,int schedule,vector<vector<uint8_t>>table);
+struct cspSolver{
+    int N{};
+    int D{};
+    int S{};
+    string outPath;
+    vector<vector<int>>job_aunt{};//统计每一班想去的
+    map<int,int>aunt_count{};//统计每个阿姨请求个数
+    vector<int>table{};//排班表
+    vector<int>notBestNum{};//代表第i班的分配不满足请求
+    void initTable();
+    void csp(); 
+    void print();
+    void localSearch();//爬山法搜索最优解
+    bool CheckSameWork();//检查重复工作,由于分配策略,公平性是绝对满足的
+    inline void exchangeJob(int index1,int index2){
+        table[index1]^=table[index2];
+        table[index2]^=table[index1];
+        table[index1]^=table[index2];
+    }
 };
-
-
-/*
-    检查到第i天,第j班(不包括j班)是否满足不连续排班的硬约束;
-*/
-bool step::checkSameWork() const {
-    //检查同一天的
-    for(int day=0;day<_day;day++){
-        for(int schedule=0;schedule<S-1;schedule++){
-            if(_table[day][schedule]==_table[day][schedule+1]){
-                return false;
-            }
+void cspSolver::initTable(){
+    for(int i=0;i<N;i++){
+        aunt_count[i] = 0;
+    }
+    for(int i=0;i<D*S;i++){
+        for(auto &x:job_aunt[i]){
+            aunt_count[x] += 1;
         }
     }
-    //检查最后一天的
-    for(int schedule=0;schedule<_schedule-1;schedule++){
-        if(_table[_day][schedule]==_table[_day][schedule+1]){
-            return false;
+
+
+    //初始化排班表,直接轮流分配
+    vector<int>initList{};
+    for (int i = 0; i < N; i++)
+    {
+        initList.push_back(i);
+    }
+    sort(initList.begin(),initList.end(),[this](int aunt1,int aunt2){return aunt_count[aunt1]>aunt_count[aunt2];});
+    auto x = initList.begin();
+    for (int i = 0; i < D*S; i++)
+    {
+        table.push_back(*x);
+        if(++x == initList.end()){
+            x = initList.begin();
         }
     }
-    //检查跨天的,但最后一天不检查
-    for(int day=0;day<_day;day++){
-        if(day==_day-1 && _schedule == 0){
-            continue;
+    //统计不好的分配
+    for(int i = 0; i < D*S; i++){
+        //在请求这班的人找不到
+        if(find(job_aunt[i].begin(),job_aunt[i].end(),table[i])==job_aunt[i].end()){
+            notBestNum.push_back(i);
         }
-        if(_table[day][S-1]==_table[day+1][0]){
+    }
+}
+bool cspSolver::CheckSameWork(){
+    for(int i = 0;i<D*S-1;i++){
+        if(table[i] == table[i+1]){
             return false;
         }
     }
     return true;
 }
-/*
-    检查是否满足至少工作的数量
-*/
-bool step::checkMinWorkCount() const {
-    map<uint8_t,int>record{};
-    for(uint8_t i=0;i<N;i++){
-        int cnt = 0;
-        for(int day=0;day<=_day;day++){
-            cnt += count(_table[day].begin(),_table[day].end(),i);
-        }
-        record[i] = cnt;
-    }
-    //统计已经分配的数量
-    int req = 0;
-    int minRequest = D*S/N;
-    for(auto &eachRecord:record){
-        if(eachRecord.second<minRequest){
-            req += (minRequest - eachRecord.second);
-        }
-    }
-    if(req>D*S-(_day*S)-_schedule){
-        return false;
-    }
-    return true;
-}
-/*
+void cspSolver::localSearch(){
+    int maxAttempt = 100;//最大失败尝试搜索次数
+    int attempt = 0;
 
-
-*/
-step::step(int day,int schedule,vector<vector<uint8_t>>table){
-    _day = day;
-    _schedule = schedule;
-    _table = table;
-}
-
-
-void csp(string outPath){
-    //
-    vector<vector<uint8_t>>init_table{D,vector<uint8_t>(S,0xff)};
-    shared_ptr<step>initStep = make_shared<step>(0,0,init_table);
     
-    //此结构用于回溯backtrack
-    stack<shared_ptr<step>>backTrackStack;
-    backTrackStack.push(initStep);
-
-    //随机化选择值
     random_device seed;
-    ranlux48 engine{seed};
-    uniform_int_distribution<> distrib(0,N-1);
-
-    //打开文件
-    ofstream out;
-    out.open(outPath);
-
-    while(!backTrackStack.empty()){
-        auto top = backTrackStack.top();
-        if(top->_day==D){
-            /*
-                TODO:
-                这里统计满足的请求数并且输出排班表
-            */
-           int cnt = 0;
-           for(int day = 0;day<D;day++){
-            for(int schedule = 0;schedule<S;schedule++){
-                if(find(job_aunt[day][schedule].begin(),job_aunt[day][schedule].end(),top->_table[day][schedule])!=job_aunt[day][schedule].end()){
-                    cnt++;
-                }
-                out<<top->_table[day][schedule];
-                if(schedule!=S-1){
-                    out<<',';
+    std::mt19937 engine{seed()};
+    while (attempt<maxAttempt)
+    {
+        if(notBestNum.empty()){
+            //已经达到最优
+            break;
+        }
+        //采用随机交换结点的方式!
+        //如果采用修改结点的方式,规模将会是无法承受的
+        uniform_int_distribution<> distrubution(0,notBestNum.size()-1);
+    
+        //随机选一个不能满足的班次
+        int failedIndex = notBestNum[distrubution(engine)];
+        if(!job_aunt[failedIndex].size()){
+            attempt+=1;
+        }
+        //遍历所有排班,尝试交换,是否有更优的分配
+        for(int i=0;i<D*S;i++){
+            if(i==failedIndex || table[i]==table[failedIndex]){
+                //不能自己换自己,也不能别人
+                continue;
+            }else{
+                exchangeJob(failedIndex,i);
+                if(!CheckSameWork()){
+                    //破坏约束
+                    exchangeJob(failedIndex,i);
+                    continue;
                 }else{
-                    out<<'\n';
+                    //不破坏约束,则判断是否会使得当前状态更优,是则保留
+                    //现在i是原来的failed,failed是原来的i
+
+                    //表明原来的第i个是满足的
+                    int checkAuntISatifaction = static_cast<int>(find(job_aunt[i].begin(),job_aunt[i].end(),table[failedIndex])!=job_aunt[i].end());
+
+                    //检查现在的满足情况
+                    //原来的failed情况
+                    int checkFailedO = static_cast<int>(find(job_aunt[failedIndex].begin(),job_aunt[failedIndex].end(),table[failedIndex])!=job_aunt[failedIndex].end());
+                    //选取的i满足情况
+                    int checkI = static_cast<int>(find(job_aunt[i].begin(),job_aunt[i].end(),table[i])!=job_aunt[i].end());
+
+                    if(checkI+checkFailedO>checkAuntISatifaction){
+                        //达到了一种更优的情况
+                        if(checkFailedO){
+                            auto it = find(notBestNum.begin(),notBestNum.end(),failedIndex);
+                            if(it == notBestNum.end()){
+                                cerr<<(failedIndex)<<"error1\n";
+                                for(auto i:notBestNum){
+                                    cerr<<i<<"\t";
+                                }
+                            }
+                            notBestNum.erase(it);
+                        }
+                        if(checkI && !checkAuntISatifaction){
+                            auto it = find(notBestNum.begin(),notBestNum.end(),i);
+                            if(it == notBestNum.end()){
+                                cerr<<"error2";
+                            }
+                            notBestNum.erase(it);
+                        }
+                        attempt=0;
+                        break;
+                    }else{
+                        //搜不到就回退
+                        exchangeJob(failedIndex,i);
+                    }
                 }
-            }
-            out<<cnt;
-            out.close();
-           }
-           break;
-        }
-        int n = 10 + job_aunt[top->_day][top->_schedule].size();
-        if(top->_chooseRecord.size()>=min({n,N})){
-            /*
-                左边的常数可以根据实践调整
-                尝试次数过多,直接放弃
-            */
-            backTrackStack.pop();
-            continue;
-        }
-
-
-        //根据最上面的状态进行扩展
-        bool flag = false;//判断能否进栈，如果不能进栈就维持循环
-        bool findReq = true;//表示在想申请这一班的人中选
-        
-
-        //
-        if(top->_chooseRecord.size() >= job_aunt[top->_day][top->_schedule].size()){
-            findReq = false;
-        }
-
-        //统计每一班已经分配的
-        map<uint8_t,int>schedule_count;
-        for(int i = 0;i < N;i++){
-            int cnt = 0;
-            for(int day = 0;day < D;day++){
-                cnt += count(top->_table.begin(),top->_table.end(),i);
-            }
-            schedule_count[i] = cnt;
-        }
-        shared_ptr<step>nextStep = make_shared<step>(top->_day+(top->_schedule+1==S),(top->_schedule+1==S)?0:top->_schedule+1,top->_schedule);
-        while(!flag){
-            if(findReq){
-                //需要在申请这一班的人中找
-                uint8_t minAunt = 0;
-                int minCount = 1000000;
-                
             }
             
-
-
+            
         }
+        attempt++;
 
     }
-
-
-    //表示搜不到解
-    if(backTrackStack.empty()){
-        out<<"No valid schedule found.";
-        out.close();
-    }
+    
 }
+
+void cspSolver::print(){
+    auto cnt = 0;
+    ofstream out;
+    out.open(outPath);  
+    for(int day = 0; day < D; day++){
+        for(int schedule = 0; schedule < S; schedule++){
+            if(find(job_aunt[day*S+schedule].begin(),job_aunt[day*S+schedule].end(),table[day*S+schedule])!=job_aunt[day*S+schedule].end()){
+                //统计满足的请求数
+                cnt++;
+            }
+            out<<static_cast<int>(table[day*S+schedule]);
+            if(schedule!=S-1){
+                out<<',';
+            }else{
+                out<<'\n';
+            }
+        }
+    }
+    out<<cnt;
+    out.close();
+}
+void cspSolver::csp(){
+    initTable();
+    localSearch();
+    print();
+}
+
+
 int main(){
     string base_in{"../input/input"};
     string base_out{"../output/output"};
@@ -199,57 +188,35 @@ int main(){
     for(int i = 0; i<10;i++){
         ifstream in;
         in.open(base_in+fileNames[i]+".txt");
-        in>>N>>comma>>D>>comma>>S;
-        //初始化各种表;
-        for (int day  = 0; day < D; day++)
+        cspSolver solver{};
+        solver.outPath = base_out+fileNames[i]+".txt";
+        in>>solver.N>>comma>>solver.D>>comma>>solver.S;
+        for (int schedule  = 0; schedule < solver.D*solver.S; schedule++)
         {
-            vector<vector<uint8_t>> each_day{S};
-            job_aunt.push_back(each_day);
-            vector<uint8_t>each_day_job{S};
-            table.push_back(each_day_job);
+            vector<int>eachJob{};
+            solver.job_aunt.push_back(eachJob);
+        }
+        for(int auntNo = 0;auntNo<solver.N;auntNo++){
+            solver.aunt_count[auntNo] = 0;
         }
         //读入文件数据
-        for(int day = 0;day<D;day++){
-            vector<vector<bool>>dayJob{};
-            for(int worker = 0;worker<N;worker++){
-                vector<bool>workerJob{};
-                for(int jobNo = 0;jobNo<2*S-1;jobNo++){
-                    if(jobNo%2==0){
-                        bool choose;
-                        in>>choose;
-                        workerJob.push_back(choose);
-                        if(choose){
-                            job_aunt[day][jobNo/2].push_back(worker);
-                        }
-                    }else{
+        bool willing;
+        for(int day = 0;day<solver.D;day++){
+            for(int worker = 0;worker<solver.N;worker++){
+                for(int jobNo = 0;jobNo<solver.S;jobNo++){
+                    in>>willing;
+                    if(willing){
+                        solver.job_aunt[day*solver.S+jobNo].push_back(worker);
+                    }
+                    if(jobNo!=solver.S-1){
                         in>>comma;
                     }
                 }
-                dayJob.push_back(workerJob);
             }
-            request.push_back(dayJob);
         }
+        in.close();
+        solver.csp();
     }
 
 }
 
-/*
-    local search废案
-    先对排班表初始化,为了防止重叠,用0xff初始化,如果有阿姨请求这一班则随意选取一个想去的阿姨
-    没有阿姨想去就随便挑一个阿姨去
-*/
-// void init_table(){
-    // random_device seed;
-    // ranlux48 engine{seed};
-    // uniform_int_distribution<> distrib(0,999);
-//     for(int i=0;i<D;i++){
-//         for(int j=0;j<S;j++){
-//             if(job_aunt[i][j].size()){
-//                 table[i].push_back(job_aunt[i][j][distrib(engine)%job_aunt[i][j].size()]);
-//             }
-//             else{
-//                 table[i].push_back(distrib(engine)%N);
-//             }
-//         }
-//     } 
-// }
