@@ -45,6 +45,8 @@ def checkAstar() :
 
 
 def checkCsp():
+    def sol(x):
+        return int(x)-1
     def change(x):
         if x=='0':
             return False
@@ -104,7 +106,7 @@ def checkCsp():
                 SAT = int(line.strip())
                 break
             cnt += problemScale[2]
-            op=list(map(int,line.split(',')))
+            op=list(map(sol,line.split(',')))
             table.extend(op)
         file.close()
         assert(checkSameWork(table) == True)
