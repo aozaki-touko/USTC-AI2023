@@ -7,11 +7,13 @@
 #include<stack>
 #include<map>
 #include<algorithm>
+#include <chrono>
 using namespace std;
 struct cspSolver{
     int N{};
     int D{};
     int S{};
+    size_t exchangeTimes{};
     string outPath;
     vector<vector<int>>job_aunt{};//统计每一班想去的
     map<int,int>aunt_count{};//统计每个阿姨请求个数
@@ -118,6 +120,7 @@ void cspSolver::localSearch(){
 
                     if(checkI+checkFailedO>checkAuntISatifaction){
                         //达到了一种更优的情况
+                        exchangeTimes++;
                         if(checkFailedO){
                             auto it = find(notBestNum.begin(),notBestNum.end(),failedIndex);
                             if(it == notBestNum.end()){
@@ -162,7 +165,7 @@ void cspSolver::print(){
                 //统计满足的请求数
                 cnt++;
             }
-            out<<static_cast<int>(table[day*S+schedule]);
+            out<<static_cast<int>(table[day*S+schedule]+1);
             if(schedule!=S-1){
                 out<<',';
             }else{
@@ -174,9 +177,15 @@ void cspSolver::print(){
     out.close();
 }
 void cspSolver::csp(){
+    auto start = chrono::high_resolution_clock::now();
     initTable();
     localSearch();
     print();
+    auto end = chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    double seconds = duration.count();
+    cout<<"time used:"<<seconds<<" second(s)"<<endl;
+    cout<<"Total exchange times:"<<exchangeTimes<<endl;
 }
 
 
@@ -185,6 +194,7 @@ int main(){
     string base_out{"../output/output"};
     char fileNames[] = {'0','1','2','3','4','5','6','7','8','9'}; 
     char comma;
+    auto start = chrono::high_resolution_clock::now();
     for(int i = 0; i<10;i++){
         ifstream in;
         in.open(base_in+fileNames[i]+".txt");
@@ -201,8 +211,9 @@ int main(){
         }
         //读入文件数据
         bool willing;
-        for(int day = 0;day<solver.D;day++){
-            for(int worker = 0;worker<solver.N;worker++){
+        
+        for(int worker = 0;worker<solver.N;worker++){
+            for(int day = 0;day<solver.D;day++){
                 for(int jobNo = 0;jobNo<solver.S;jobNo++){
                     in>>willing;
                     if(willing){
@@ -215,8 +226,12 @@ int main(){
             }
         }
         in.close();
+        cout<<"Now processing input"<<fileNames[i]<<endl;
         solver.csp();
     }
-
+    auto end = chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    double seconds = duration.count();
+    cout<<"All inputs used:"<<seconds<<" second(s)"<<endl;
 }
 

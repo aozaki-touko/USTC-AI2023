@@ -5,6 +5,10 @@
 #include<fstream>
 #include<queue>
 #include<unordered_set>
+#include <chrono>
+#include<set>
+#define H h3
+#define COST 1
 using namespace std;
 const long long P = 1000000007;  //
 const long long MOD = 1000000009;  // 
@@ -59,13 +63,86 @@ short h1(node &n){
     }
     return h*6;
 }
+short h2(node&n){
+    return 0;
+}
+short h3(node &n){
+    short cnt = 0;
+    set<pair<int,int>>visited;
+    //先统计4种L形状的
+    for(int i = 0;i<n._n;i++){
+        for(int j = 0;j<n._n;j++){
+            //当前块已被访问，则跳过
+            if(!n._blocks[i][j]){
+                continue;
+            }
+            if(visited.find({i,j})!=visited.end()){
+                continue;
+            }
+            for(int k = 1;k<5;k++){
+                if(is_valid_op(n,i,j,k)){
+                    bool isDyValid = n._blocks[i+dy[k]][j] && (visited.find({i+dy[k],j})==visited.end());
+                    bool isDxValid = n._blocks[i][j+dx[k]] && (visited.find({i,j+dx[k]})==visited.end());
+                    if(isDxValid && isDyValid){
+                        visited.insert({i+dy[k],j});
+                        visited.insert({i,j+dx[k]});
+                        visited.insert({i,j});
+                        cnt += 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    //再统计两个连着的
+    for(int i = 0;i<n._n;i++){
+        for(int j = 0;j<n._n;j++){
+            //当前块已被访问，则跳过
+            if(!n._blocks[i][j]){
+                continue;
+            }
+            if(visited.find({i,j})!=visited.end()){
+                continue;
+            }
+            for(int k = 1;k<5;k++){
+                if(is_valid_op(n,i,j,k)){
+                    bool isDyValid = n._blocks[i+dy[k]][j] && (visited.find({i+dy[k],j})==visited.end());
+                    if(isDyValid){
+                        visited.insert({i+dy[k],j});
+                        visited.insert({i,j});
+                        cnt += 2;
+                        break;
+                    }
+                    bool isDxValid = n._blocks[i][j+dx[k]] && (visited.find({i,j+dx[k]})==visited.end());
+                    if(isDxValid){
+                        visited.insert({i,j+dx[k]});
+                        visited.insert({i,j});
+                        cnt += 2;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    //统计单独的
+    for(int i = 0;i<n._n;i++){
+        for(int j = 0;j<n._n;j++){
+            //当前块已被访问，则跳过
+            if(n._blocks[i][j] && visited.find({i,j})==visited.end()){
+                cnt += 3;
+            }
+
+        }
+    }
+    return cnt;
+}
 node turn(node n,short i,short j, short k){
     node newState{n._n,n._blocks,n._path};
-    newState._cost = n._cost+3;
+    newState._cost = n._cost+COST;
     newState._blocks[i][j] = !newState._blocks[i][j];
     newState._blocks[i+dy[k]][j] = !newState._blocks[i+dy[k]][j];
     newState._blocks[i][j+dx[k]] = !newState._blocks[i][j+dx[k]];
-    newState._heuristic = h1(newState);
+    newState._heuristic = H(newState);
     newState._path.push_back(operation{i,j,k});
     return newState;
 }
@@ -81,50 +158,63 @@ long long getHashVal(node &n){
     return hashValue;
 }
 void astar(node &init, string savePath){
+    size_t nodeCount = 0;
+    auto start = chrono::high_resolution_clock::now();
     ofstream out;
     out.open(savePath);
     priority_queue<node> open_list{};
     unordered_set<long long>visited{};
     open_list.push(init);
+    // cout<<init._heuristic;
     bool flag{};
-    while(!open_list.empty()){
-        node n = open_list.top();
-        open_list.pop();
-        if(is_goal(n)){
-            flag = true;
-            out<<n._path.size()<<'\n';
-            for(auto &i:n._path){
-                out<<i._i<<','<<i._j<<','<<i._k<<'\n';
+        while(!open_list.empty()){
+            node n = open_list.top();
+            open_list.pop();
+            if(is_goal(n)){
+                flag = true;
+                out<<n._path.size()<<'\n';
+                for(auto &i:n._path){
+                    out<<i._i<<','<<i._j<<','<<i._k<<'\n';
+                }
+                out.close();
+                break;
             }
-            out.close();
-            break;
-        }
-        long long hash = getHashVal(n);
-        visited.emplace(hash);
-        for(int i=0;i<n._n;i++){
-            for(int j=0;j<n._n;j++){
-                for(int k=1;k<5;k++){
-                    if(is_valid_op(n,i,j,k)){
-                        node newState = turn(n,i,j,k);
-                        if(n._path.size()>35){
-                            continue;//防止规模过大
-                        }
-                        long long val = getHashVal(newState);
-                        if(visited.find(val)==visited.end()){
-                            open_list.push(newState);
+            long long hash = getHashVal(n);
+            visited.emplace(hash);
+            for(int i=0;i<n._n;i++){
+                for(int j=0;j<n._n;j++){
+                    for(int k=1;k<5;k++){
+                        if(is_valid_op(n,i,j,k)){
+                            node newState = turn(n,i,j,k);
+                            if(n._path.size()>35){
+                                continue;//防止规模过大
+                            }
+                            long long val = getHashVal(newState);
+                            if(visited.find(val)==visited.end()){
+                                open_list.push(newState);
+                            }
                         }
                     }
                 }
             }
+            if(open_list.size()>nodeCount){
+                nodeCount = open_list.size();
+            }
         }
+    auto end = chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = end - start;
+    double seconds = duration.count();
+    cout<<"time used:"<<seconds<<" second(s)"<<endl;
+    cout<<"Max node count:"<<nodeCount<<endl;
+    if(!flag){
+        out<<"No valid solution.";
     }
-
 }
 int main(){
     string inPath = "../input/input";
     string outPath = "../output/output";
     char files[] = {'0','1','2','3','4','5','6','7','8','9'};
-    for (short i = 1; i < 10; i++){
+    for (short i = 0; i < 10; i++){
         string input = inPath + files[i] + ".txt";
         string output = outPath + files[i] + ".txt";
         ifstream in;
@@ -147,8 +237,8 @@ int main(){
 //            }
 //        }
         in.close();
-        cout<<files[i];
-        init._heuristic = h1(init);
+        cout<<"Now Processing input"<<files[i]<<endl;
+        init._heuristic = H(init);
         astar(init,output);
     }
 }
